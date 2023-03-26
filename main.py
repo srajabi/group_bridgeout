@@ -104,7 +104,7 @@ def train(model: nn.Module, train_data, bptt, criterion, ntokens, optimizer, sch
 
     num_batches = len(train_data) // bptt
     for batch, i in enumerate(range(0, train_data.size(0) - 1, bptt)):
-        data, targets = get_batch(train_data, i)
+        data, targets = get_batch(train_data, i, bptt)
         seq_len = data.size(0)
         if seq_len != bptt:  # only on last batch
             src_mask = src_mask[:seq_len, :seq_len]
