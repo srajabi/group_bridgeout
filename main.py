@@ -169,7 +169,7 @@ class Config:
         # gbo
         self.gbo_p = 0.1
         self.gbo_posemb_p = 0.8
-        self.gbo_on = True
+        self.gbo_on = False
 
         # transformer
         self.batch_size = 32  # training
@@ -190,7 +190,7 @@ class Config:
         self.nesterov = True  # sgd
         self.lr = 5  # step lr
         self.gamma = 0.5  # step lr
-        self.lr_step_size = 35  # step lr
+        self.lr_step_size = 25  # step lr
 
         self.epochs = 400
 
