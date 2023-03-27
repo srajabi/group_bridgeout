@@ -17,6 +17,7 @@ from torchtext.datasets import WikiText2
 from torchtext.vocab import build_vocab_from_iterator
 
 from models import TransformerModel
+from comet import get_comet_experiment
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -224,48 +225,66 @@ def main(config):
     hyperparam_comment = f"lrss={config.lr_step_size},gbo={config.gbo_on},gbop={config.gbo_p},gbopep={config.gbo_posemb_p},sql={config.bptt},pos={config.use_pos_embed},do={config.pos_dropout},edo={config.enc_do}"
     writer = MySummaryWriter(comment=hyperparam_comment)
 
-    for epoch in range(1, config.epochs + 1):
-        epoch_start_time = time.time()
-        train(model, train_data, config.bptt, criterion, ntokens, optimizer, scheduler, epoch)
-        val_loss = evaluate(model, val_data, config.bptt, ntokens, criterion)
-        val_ppl = math.exp(val_loss)
-        best_val_ppl = min(best_val_ppl, val_ppl)
-        elapsed = time.time() - epoch_start_time
-        print('-' * 89)
-        print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
-              f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
-        print('-' * 89)
-        writer.add_scalar('Loss/val', val_loss, epoch)
-        writer.add_scalar('PPL/val', val_ppl, epoch)
-        writer.add_scalar('Hyperparms/LR', lr, epoch)
-        writer.add_scalar('Loss/train', cur_loss, epoch)
-        writer.add_scalar('PPL/train', ppl, epoch)
+    experiment = get_comet_experiment()
+    experiment.log_parameters(vars(config))
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_model = copy.deepcopy(model)
+    with experiment.train():
+        for epoch in range(1, config.epochs + 1):
+            epoch_start_time = time.time()
+            train(model, train_data, config.bptt, criterion, ntokens, optimizer, scheduler, epoch)
+            val_loss = evaluate(model, val_data, config.bptt, ntokens, criterion)
+            val_ppl = math.exp(val_loss)
+            best_val_ppl = min(best_val_ppl, val_ppl)
+            elapsed = time.time() - epoch_start_time
+            print('-' * 89)
+            print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
+                  f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
+            print('-' * 89)
 
-        scheduler.step()
+            experiment.log_metric('val/loss', val_loss, epoch)
+            experiment.log_metric('val/ppl', val_ppl, epoch)
+            experiment.log_metric('lr', lr, epoch)
+            experiment.log_metric('train/loss', cur_loss, epoch)
+            experiment.log_metric('train/ppl', ppl, epoch)
 
-    test_loss = evaluate(best_model, test_data, config.bptt, ntokens, criterion)
-    test_ppl = math.exp(test_loss)
-    print('=' * 89)
-    print(f'| End of training | test loss {test_loss:5.2f} | '
-          f'test ppl {test_ppl:8.2f}')
-    print('=' * 89)
-    writer.add_scalar('Loss/test', test_loss, epoch)
-    writer.add_scalar('PPL/test', test_ppl, epoch)
+            writer.add_scalar('Loss/val', val_loss, epoch)
+            writer.add_scalar('PPL/val', val_ppl, epoch)
+            writer.add_scalar('Hyperparms/LR', lr, epoch)
+            writer.add_scalar('Loss/train', cur_loss, epoch)
+            writer.add_scalar('PPL/train', ppl, epoch)
 
-    metrics = {
-        'hparam/ppl_train': best_ppl,
-        'hparam/ppl_val': best_val_ppl,
-        'hparam/ppl_test': test_ppl
-    }
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_model = copy.deepcopy(model)
 
-    writer.add_hparams(config.__dict__, metrics)
+            scheduler.step()
 
-    print(config.__dict__)
-    print(metrics)
+    with experiment.test():
+        test_loss = evaluate(best_model, test_data, config.bptt, ntokens, criterion)
+        test_ppl = math.exp(test_loss)
+        print('=' * 89)
+        print(f'| End of training | test loss {test_loss:5.2f} | '
+              f'test ppl {test_ppl:8.2f}')
+        print('=' * 89)
+
+        experiment.log_metric('test/loss', test_loss, epoch)
+        experiment.log_metric('test/ppl', test_ppl, epoch)
+
+        writer.add_scalar('Loss/test', test_loss, epoch)
+        writer.add_scalar('PPL/test', test_ppl, epoch)
+
+        metrics = {
+            'hparam/ppl_train': best_ppl,
+            'hparam/ppl_val': best_val_ppl,
+            'hparam/ppl_test': test_ppl
+        }
+
+        experiment.log_metrics(metrics)
+
+        writer.add_hparams(config.__dict__, metrics)
+
+        print(config.__dict__)
+        print(metrics)
 
 
 if __name__ == '__main__':
