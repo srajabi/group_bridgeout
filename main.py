@@ -228,10 +228,15 @@ def main(config):
     experiment = get_comet_experiment()
     experiment.log_parameters(vars(config))
 
-    with experiment.train():
-        for epoch in range(1, config.epochs + 1):
-            epoch_start_time = time.time()
+    for epoch in range(1, config.epochs + 1):
+        epoch_start_time = time.time()
+
+        with experiment.train():
             train(model, train_data, config.bptt, criterion, ntokens, optimizer, scheduler, epoch)
+            experiment.log_metric('train/loss', cur_loss, epoch)
+            experiment.log_metric('train/ppl', ppl, epoch)
+
+        with experiment.test():
             val_loss = evaluate(model, val_data, config.bptt, ntokens, criterion)
             val_ppl = math.exp(val_loss)
             best_val_ppl = min(best_val_ppl, val_ppl)
@@ -243,21 +248,20 @@ def main(config):
 
             experiment.log_metric('val/loss', val_loss, epoch)
             experiment.log_metric('val/ppl', val_ppl, epoch)
-            experiment.log_metric('lr', lr, epoch)
-            experiment.log_metric('train/loss', cur_loss, epoch)
-            experiment.log_metric('train/ppl', ppl, epoch)
 
-            writer.add_scalar('Loss/val', val_loss, epoch)
-            writer.add_scalar('PPL/val', val_ppl, epoch)
-            writer.add_scalar('Hyperparms/LR', lr, epoch)
-            writer.add_scalar('Loss/train', cur_loss, epoch)
-            writer.add_scalar('PPL/train', ppl, epoch)
+        experiment.log_metric('lr', lr, epoch)
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_model = copy.deepcopy(model)
+        writer.add_scalar('Loss/val', val_loss, epoch)
+        writer.add_scalar('PPL/val', val_ppl, epoch)
+        writer.add_scalar('Hyperparms/LR', lr, epoch)
+        writer.add_scalar('Loss/train', cur_loss, epoch)
+        writer.add_scalar('PPL/train', ppl, epoch)
 
-            scheduler.step()
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_model = copy.deepcopy(model)
+
+        scheduler.step()
 
     with experiment.test():
         test_loss = evaluate(best_model, test_data, config.bptt, ntokens, criterion)
@@ -285,6 +289,8 @@ def main(config):
 
         print(config.__dict__)
         print(metrics)
+
+    experiment.end()
 
 
 if __name__ == '__main__':
