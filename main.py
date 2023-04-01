@@ -193,7 +193,7 @@ class Config:
         self.gamma = 0.5  # step lr
         self.lr_step_size = 25  # step lr
 
-        self.epochs = 400
+        self.epochs = 150
 
 
 # globals
