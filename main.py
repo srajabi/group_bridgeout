@@ -169,8 +169,8 @@ class Config:
     def __init__(self) -> None:
         # gbo
         self.gbo_p = 0.1
-        self.gbo_posemb_p = 0.8
-        self.gbo_on = False
+        self.gbo_posemb_p = 0.0
+        self.gbo_on = True
 
         # transformer
         self.batch_size = 32  # training
@@ -182,7 +182,7 @@ class Config:
         self.nhead = 8  # number of heads in nn.MultiheadAttention
         self.pos_dropout = 0.25  # positional dropout probability
         self.enc_do = 0.35  # encoder layer dropout
-        self.use_pos_embed = False
+        self.use_pos_embed = True
 
         self.SEED = 9999
 
@@ -228,40 +228,43 @@ def main(config):
     experiment = get_comet_experiment()
     experiment.log_parameters(vars(config))
 
-    for epoch in range(1, config.epochs + 1):
-        epoch_start_time = time.time()
+    try:
+        for epoch in range(1, config.epochs + 1):
+            epoch_start_time = time.time()
 
-        with experiment.train():
-            train(model, train_data, config.bptt, criterion, ntokens, optimizer, scheduler, epoch)
-            experiment.log_metric('train/loss', cur_loss, epoch)
-            experiment.log_metric('train/ppl', ppl, epoch)
+            with experiment.train():
+                train(model, train_data, config.bptt, criterion, ntokens, optimizer, scheduler, epoch)
+                experiment.log_metric('train/loss', cur_loss, epoch)
+                experiment.log_metric('train/ppl', ppl, epoch)
 
-        with experiment.test():
-            val_loss = evaluate(model, val_data, config.bptt, ntokens, criterion)
-            val_ppl = math.exp(val_loss)
-            best_val_ppl = min(best_val_ppl, val_ppl)
-            elapsed = time.time() - epoch_start_time
-            print('-' * 89)
-            print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
-                  f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
-            print('-' * 89)
+            with experiment.test():
+                val_loss = evaluate(model, val_data, config.bptt, ntokens, criterion)
+                val_ppl = math.exp(val_loss)
+                best_val_ppl = min(best_val_ppl, val_ppl)
+                elapsed = time.time() - epoch_start_time
+                print('-' * 89)
+                print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
+                      f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
+                print('-' * 89)
 
-            experiment.log_metric('val/loss', val_loss, epoch)
-            experiment.log_metric('val/ppl', val_ppl, epoch)
+                experiment.log_metric('val/loss', val_loss, epoch)
+                experiment.log_metric('val/ppl', val_ppl, epoch)
 
-        experiment.log_metric('lr', lr, epoch)
+            experiment.log_metric('lr', lr, epoch)
 
-        writer.add_scalar('Loss/val', val_loss, epoch)
-        writer.add_scalar('PPL/val', val_ppl, epoch)
-        writer.add_scalar('Hyperparms/LR', lr, epoch)
-        writer.add_scalar('Loss/train', cur_loss, epoch)
-        writer.add_scalar('PPL/train', ppl, epoch)
+            writer.add_scalar('Loss/val', val_loss, epoch)
+            writer.add_scalar('PPL/val', val_ppl, epoch)
+            writer.add_scalar('Hyperparms/LR', lr, epoch)
+            writer.add_scalar('Loss/train', cur_loss, epoch)
+            writer.add_scalar('PPL/train', ppl, epoch)
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_model = copy.deepcopy(model)
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_model = copy.deepcopy(model)
 
-        scheduler.step()
+            scheduler.step()
+    except KeyboardInterrupt:
+        print('Captured Keyboard Interrupt')
 
     with experiment.test():
         test_loss = evaluate(best_model, test_data, config.bptt, ntokens, criterion)
