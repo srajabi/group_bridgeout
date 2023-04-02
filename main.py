@@ -18,6 +18,7 @@ from torchtext.vocab import build_vocab_from_iterator
 
 from models import TransformerModel
 from comet import get_comet_experiment
+from comet_ml import Artifact
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -292,6 +293,12 @@ def main(config):
 
         print(config.__dict__)
         print(metrics)
+
+    torch.save(best_model.state_dict(), './best_model.pth')
+    artifact = Artifact(name='Model File', artifact_type='model')
+    artifact.add('./best_mode.pth')
+
+    experiment.log_artifact(artifact)
 
     experiment.end()
 
