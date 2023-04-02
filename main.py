@@ -1,4 +1,4 @@
-
+import argparse
 import copy
 import math
 import random
@@ -294,9 +294,9 @@ def main(config):
         print(config.__dict__)
         print(metrics)
 
-    torch.save(best_model.state_dict(), './best_model.pth')
+    torch.save(best_model.state_dict(), 'best_model.pth')
     artifact = Artifact(name='Model File', artifact_type='model')
-    artifact.add('./best_mode.pth')
+    artifact.add('best_model.pth')
 
     experiment.log_artifact(artifact)
 
@@ -304,4 +304,16 @@ def main(config):
 
 
 if __name__ == '__main__':
-    main(Config())
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('gbo_posemb_p', type=float)
+    # TODO the rest
+
+    args = parser.parse_args()
+
+    config = Config()
+    config.gbo_posemb_p = args.gbo_posemb_p
+
+    print(args)
+
+    main(config)
