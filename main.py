@@ -306,7 +306,7 @@ def main(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('gbo_posemb_p', type=float)
+    parser.add_argument('--gbo_posemb_p', type=float)
     # TODO the rest
 
     args = parser.parse_args()
