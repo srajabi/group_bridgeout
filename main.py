@@ -227,7 +227,7 @@ def main(config):
     hyperparam_comment = f"lrss={config.lr_step_size},gbop={config.gbo_p},gbopep={config.gbo_posemb_p},sql={config.bptt},pos={config.use_orig_pos_enc},do={config.pos_dropout},edo={config.enc_do}"
     writer = MySummaryWriter(comment=hyperparam_comment)
 
-    experiment = get_comet_experiment()
+    experiment = get_comet_experiment(config.experiment_name)
     experiment.log_parameters(vars(config))
 
     try:
