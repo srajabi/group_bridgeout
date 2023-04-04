@@ -14,12 +14,12 @@ class TransformerModel(nn.Module):
     def __init__(self,
                  ntoken: int, d_model: int, nhead: int, d_hid: int,
                  nlayers: int, block_size: int,
-                 use_pos_embed: bool, pos_dropout: float, enc_dropout: float,
-                 use_gbo: bool, gbo_p: float, gbo_posemb_p: float):
+                 use_orig_pos_enc: bool, pos_dropout: float, enc_dropout: float,
+                 gbo_p: float, gbo_posemb_p: float):
         super().__init__()
         self.model_type = 'Transformer'
 
-        self.use_pos_embed = use_pos_embed
+        self.use_orig_pos_enc = use_orig_pos_enc
         self.pos_encoder = PositionalEncoding(d_model, pos_dropout)
 
         self.block_size = block_size
@@ -27,10 +27,10 @@ class TransformerModel(nn.Module):
         self.wpe = nn.Embedding(block_size, d_model)
         self.drop = nn.Dropout(pos_dropout)
         self.gbo = GroupBridgeoutFcLayer(d_model, d_model, nu=gbo_posemb_p)
-        self.do_gbo = use_gbo
+        self.gbo_posemb_p = gbo_posemb_p
 
         encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=nhead,
-                                                 gbo_on=use_gbo, gbo_p=gbo_p,
+                                                 gbo_p=gbo_p,
                                                  dim_feedforward=d_hid, dropout=enc_dropout)
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
         self.encoder = nn.Embedding(ntoken, d_model)
@@ -56,7 +56,7 @@ class TransformerModel(nn.Module):
         Returns:
             output Tensor of shape [seq_len, batch_size, ntoken]
         """
-        if self.use_pos_embed:
+        if self.use_orig_pos_enc:
             src = self.encoder(src) * math.sqrt(self.d_model)
             src = self.pos_encoder(src)
         else:
@@ -71,7 +71,7 @@ class TransformerModel(nn.Module):
 
             # print(src.size(), pos.size(), tok_emb.size(), pos_emb.size())
 
-            if self.do_gbo:
+            if self.gbo_posemb_p:
                 src = self.gbo(tok_emb + pos_emb)
             else:
                 src = self.drop(tok_emb + pos_emb)
@@ -153,7 +153,7 @@ class TransformerEncoderLayer(nn.Module):
     __constants__ = ['batch_first', 'norm_first']
 
     def __init__(self, d_model: int, nhead: int,
-                 gbo_on: bool, gbo_p: float,
+                 gbo_p: float,
                  dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
                  layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = False,
@@ -176,7 +176,7 @@ class TransformerEncoderLayer(nn.Module):
         # GBO
         self.gbo1 = GroupBridgeoutFcLayer(d_model, dim_feedforward, nu=gbo_p, **factory_kwargs)
         self.gbo2 = GroupBridgeoutFcLayer(d_model, dim_feedforward, nu=gbo_p, **factory_kwargs)
-        self.do_gbo = gbo_on
+        self.gbo_p = gbo_p
 
         # Legacy string support for activation function.
         if isinstance(activation, str):
@@ -313,7 +313,7 @@ class TransformerEncoderLayer(nn.Module):
 
     # feed forward block
     def _ff_block(self, x: Tensor) -> Tensor:
-        if self.do_gbo:
+        if self.gbo_p:
             x = self.gbo1(x)
         else:
             x = self.linear1(x)
@@ -321,7 +321,7 @@ class TransformerEncoderLayer(nn.Module):
         x = self.activation(x)
         x = self.dropout(x)
 
-        if self.do_gbo:
+        if self.gbo_p:
             x = self.gbo2(x)
         else:
             x = self.linear2(x)

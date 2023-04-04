@@ -168,10 +168,11 @@ class MySummaryWriter(SummaryWriter):
 
 class Config:
     def __init__(self) -> None:
+        self.experiment_name = 'unnamed-exp'
+
         # gbo
         self.gbo_p = 0.1
         self.gbo_posemb_p = 0.0
-        self.gbo_on = True
 
         # transformer
         self.batch_size = 32  # training
@@ -183,7 +184,7 @@ class Config:
         self.nhead = 8  # number of heads in nn.MultiheadAttention
         self.pos_dropout = 0.25  # positional dropout probability
         self.enc_do = 0.35  # encoder layer dropout
-        self.use_pos_embed = True
+        self.use_orig_pos_enc = False
 
         self.SEED = 9999
 
@@ -211,9 +212,9 @@ def main(config):
 
     model = TransformerModel(ntoken=ntokens, d_model=config.emsize,
                              nhead=config.nhead, d_hid=config.d_hid, nlayers=config.nlayers,
-                             block_size=config.bptt, use_pos_embed=config.use_pos_embed, pos_dropout=config.pos_dropout,
-                             enc_dropout=config.enc_do,
-                             use_gbo=config.gbo_on, gbo_p=config.gbo_p, gbo_posemb_p=config.gbo_posemb_p).to(device)
+                             block_size=config.bptt, use_orig_pos_enc=config.use_orig_pos_enc,
+                             pos_dropout=config.pos_dropout, enc_dropout=config.enc_do,
+                             gbo_p=config.gbo_p, gbo_posemb_p=config.gbo_posemb_p).to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=config.lr, momentum=config.momentum, nesterov=config.nesterov)
@@ -223,7 +224,7 @@ def main(config):
     best_val_ppl = float('inf')
     best_model = None
 
-    hyperparam_comment = f"lrss={config.lr_step_size},gbo={config.gbo_on},gbop={config.gbo_p},gbopep={config.gbo_posemb_p},sql={config.bptt},pos={config.use_pos_embed},do={config.pos_dropout},edo={config.enc_do}"
+    hyperparam_comment = f"lrss={config.lr_step_size},gbop={config.gbo_p},gbopep={config.gbo_posemb_p},sql={config.bptt},pos={config.use_orig_pos_enc},do={config.pos_dropout},edo={config.enc_do}"
     writer = MySummaryWriter(comment=hyperparam_comment)
 
     experiment = get_comet_experiment()
@@ -306,13 +307,32 @@ def main(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--gbo_posemb_p', type=float)
-    # TODO the rest
+    parser.add_argument('--experiment_name', type=str, required=True)
+    parser.add_argument('--gbo_p', type=float, required=True)
+    parser.add_argument('--gbo_posemb_p', type=float, required=True)
+    parser.add_argument('--enc_do', type=float, required=True)
+    parser.add_argument('--pos_dropout', type=float, required=True)
+    parser.add_argument('--gamma', type=float, required=True)
+    parser.add_argument('--lr_step_size', type=int, required=True)
+    parser.add_argument('--epochs', type=int, required=True)
 
     args = parser.parse_args()
 
     config = Config()
+    config.gbo_p = args.gbo_p
     config.gbo_posemb_p = args.gbo_posemb_p
+    config.gamma = args.gamma
+    config.lr_step_size = args.lr_step_size
+    config.epochs = args.epochs
+    config.experiment_name = args.experiment_name
+    config.pos_dropout = args.pos_dropout
+    config.enc_do = args.enc_do
+
+    if config.gbo_p and config.enc_do:
+        raise ValueError('Cannot have both gbo_p and enc_do enabled at the same time.')
+
+    if config.pos_dropout and config.gbo_posemb_p:
+        raise ValueError('Cannot have both pos_dropout and gbo_posem_p enabled at the same time.')
 
     print(args)
 
