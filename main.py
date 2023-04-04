@@ -168,6 +168,7 @@ class MySummaryWriter(SummaryWriter):
 
 class Config:
     def __init__(self) -> None:
+        self.project_name = 'structuredsparsity'
         self.experiment_name = 'unnamed-exp'
 
         # gbo
@@ -227,7 +228,7 @@ def main(config):
     hyperparam_comment = f"lrss={config.lr_step_size},gbop={config.gbo_p},gbopep={config.gbo_posemb_p},sql={config.bptt},pos={config.use_orig_pos_enc},do={config.pos_dropout},edo={config.enc_do}"
     writer = MySummaryWriter(comment=hyperparam_comment)
 
-    experiment = get_comet_experiment(config.experiment_name)
+    experiment = get_comet_experiment(config.project_name, config.experiment_name)
     experiment.log_parameters(vars(config))
 
     try:
@@ -307,6 +308,7 @@ def main(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--project_name', type=str, required=True)
     parser.add_argument('--experiment_name', type=str, required=True)
     parser.add_argument('--gbo_p', type=float, required=True)
     parser.add_argument('--gbo_posemb_p', type=float, required=True)
@@ -319,14 +321,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config = Config()
+    config.project_name = args.project_name
+    config.experiment_name = args.experiment_name
     config.gbo_p = args.gbo_p
     config.gbo_posemb_p = args.gbo_posemb_p
+    config.enc_do = args.enc_do
+    config.pos_dropout = args.pos_dropout
     config.gamma = args.gamma
     config.lr_step_size = args.lr_step_size
     config.epochs = args.epochs
-    config.experiment_name = args.experiment_name
-    config.pos_dropout = args.pos_dropout
-    config.enc_do = args.enc_do
 
     if config.gbo_p and config.enc_do:
         raise ValueError('Cannot have both gbo_p and enc_do enabled at the same time.')

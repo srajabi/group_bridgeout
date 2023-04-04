@@ -2,9 +2,8 @@ import os
 from comet_ml import Experiment
 
 
-def get_comet_experiment(experiment_name):
+def get_comet_experiment(project_name, experiment_name):
     comet_api_key = os.environ.get('COMET_API_KEY', 'dummy_key')
-    project_name = "structuredsparsity"
     workspace = "srajabi"
 
     if comet_api_key:
