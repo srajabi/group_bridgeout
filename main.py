@@ -194,7 +194,7 @@ class Config:
         self.nesterov = True  # sgd
         self.lr = 5  # step lr
         self.gamma = 0.5  # step lr
-        self.lr_step_size = 25  # step lr
+        self.lr_milestones = 25  # step lr
 
         self.epochs = 200
 
@@ -219,13 +219,13 @@ def main(config):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=config.lr, momentum=config.momentum, nesterov=config.nesterov)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, config.lr_step_size, gamma=config.gamma)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, config.lr_milestones, gamma=config.gamma)
 
     best_val_loss = float('inf')
     best_val_ppl = float('inf')
     best_model = None
 
-    hyperparam_comment = f"lrss={config.lr_step_size},gbop={config.gbo_p},gbopep={config.gbo_posemb_p},sql={config.bptt},pos={config.use_orig_pos_enc},do={config.pos_dropout},edo={config.enc_do}"
+    hyperparam_comment = f"lrss={config.lr_milestones},gbop={config.gbo_p},gbopep={config.gbo_posemb_p},sql={config.bptt},pos={config.use_orig_pos_enc},do={config.pos_dropout},edo={config.enc_do}"
     writer = MySummaryWriter(comment=hyperparam_comment)
 
     experiment = get_comet_experiment(config.project_name, config.experiment_name)
@@ -315,7 +315,7 @@ if __name__ == '__main__':
     parser.add_argument('--enc_do', type=float, required=True)
     parser.add_argument('--pos_dropout', type=float, required=True)
     parser.add_argument('--gamma', type=float, required=True)
-    parser.add_argument('--lr_step_size', type=int, required=True)
+    parser.add_argument('--lr_milestones', type=str, required=True)
     parser.add_argument('--epochs', type=int, required=True)
 
     args = parser.parse_args()
@@ -328,7 +328,7 @@ if __name__ == '__main__':
     config.enc_do = args.enc_do
     config.pos_dropout = args.pos_dropout
     config.gamma = args.gamma
-    config.lr_step_size = args.lr_step_size
+    config.lr_milestones = list(map(int, args.lr_milestones.split(',')))
     config.epochs = args.epochs
 
     if config.gbo_p and config.enc_do:
@@ -338,5 +338,6 @@ if __name__ == '__main__':
         raise ValueError('Cannot have both pos_dropout and gbo_posem_p enabled at the same time.')
 
     print(args)
+    print(config.__dict__)
 
     main(config)
