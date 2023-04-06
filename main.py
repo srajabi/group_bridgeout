@@ -10,8 +10,6 @@ import torch
 from torch import Tensor
 from torch import nn
 from torch.utils.data import dataset
-from torch.utils.tensorboard import SummaryWriter
-from torch.utils.tensorboard.summary import hparams
 from torchtext.data.utils import get_tokenizer
 from torchtext.datasets import WikiText2
 from torchtext.vocab import build_vocab_from_iterator
@@ -148,24 +146,6 @@ def evaluate(model: nn.Module, eval_data: Tensor, bptt, ntokens, criterion) -> f
     return total_loss / (len(eval_data) - 1)
 
 
-# https://github.com/pytorch/pytorch/issues/32651#issuecomment-643791116
-class MySummaryWriter(SummaryWriter):
-    def add_hparams(self, hparam_dict, metric_dict):
-        torch._C._log_api_usage_once("tensorboard.logging.add_hparams")
-        if type(hparam_dict) is not dict or type(metric_dict) is not dict:
-            raise TypeError('hparam_dict and metric_dict should be dictionary.')
-        exp, ssi, sei = hparams(hparam_dict, metric_dict)
-
-        logdir = self._get_file_writer().get_logdir()
-
-        with SummaryWriter(log_dir=logdir) as w_hp:
-            w_hp.file_writer.add_summary(exp)
-            w_hp.file_writer.add_summary(ssi)
-            w_hp.file_writer.add_summary(sei)
-            for k, v in metric_dict.items():
-                w_hp.add_scalar(k, v)
-
-
 class Config:
     def __init__(self) -> None:
         self.project_name = 'structuredsparsity'
@@ -225,9 +205,6 @@ def main(config):
     best_val_ppl = float('inf')
     best_model = None
 
-    hyperparam_comment = f"lrss={config.lr_milestones},gbop={config.gbo_p},gbopep={config.gbo_posemb_p},sql={config.bptt},pos={config.use_orig_pos_enc},do={config.pos_dropout},edo={config.enc_do}"
-    writer = MySummaryWriter(comment=hyperparam_comment)
-
     experiment = get_comet_experiment(config.project_name, config.experiment_name)
     experiment.log_parameters(vars(config))
 
@@ -255,12 +232,6 @@ def main(config):
 
             experiment.log_metric('lr', lr, epoch)
 
-            writer.add_scalar('Loss/val', val_loss, epoch)
-            writer.add_scalar('PPL/val', val_ppl, epoch)
-            writer.add_scalar('Hyperparms/LR', lr, epoch)
-            writer.add_scalar('Loss/train', cur_loss, epoch)
-            writer.add_scalar('PPL/train', ppl, epoch)
-
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_model = copy.deepcopy(model)
@@ -280,9 +251,6 @@ def main(config):
         experiment.log_metric('test/loss', test_loss, epoch)
         experiment.log_metric('test/ppl', test_ppl, epoch)
 
-        writer.add_scalar('Loss/test', test_loss, epoch)
-        writer.add_scalar('PPL/test', test_ppl, epoch)
-
         metrics = {
             'hparam/ppl_train': best_ppl,
             'hparam/ppl_val': best_val_ppl,
@@ -290,8 +258,6 @@ def main(config):
         }
 
         experiment.log_metrics(metrics)
-
-        writer.add_hparams(config.__dict__, metrics)
 
         print(config.__dict__)
         print(metrics)
