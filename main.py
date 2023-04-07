@@ -208,37 +208,34 @@ def main(config):
     experiment = get_comet_experiment(config.project_name, config.experiment_name)
     experiment.log_parameters(vars(config))
 
-    try:
-        for epoch in range(1, config.epochs + 1):
-            epoch_start_time = time.time()
+    for epoch in range(1, config.epochs + 1):
+        epoch_start_time = time.time()
 
-            with experiment.train():
-                train(model, train_data, config.bptt, criterion, ntokens, optimizer, scheduler, epoch)
-                experiment.log_metric('train/loss', cur_loss, epoch)
-                experiment.log_metric('train/ppl', ppl, epoch)
+        with experiment.train():
+            train(model, train_data, config.bptt, criterion, ntokens, optimizer, scheduler, epoch)
+            experiment.log_metric('train/loss', cur_loss, epoch)
+            experiment.log_metric('train/ppl', ppl, epoch)
 
-            with experiment.test():
-                val_loss = evaluate(model, val_data, config.bptt, ntokens, criterion)
-                val_ppl = math.exp(val_loss)
-                best_val_ppl = min(best_val_ppl, val_ppl)
-                elapsed = time.time() - epoch_start_time
-                print('-' * 89)
-                print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
-                      f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
-                print('-' * 89)
+        with experiment.test():
+            val_loss = evaluate(model, val_data, config.bptt, ntokens, criterion)
+            val_ppl = math.exp(val_loss)
+            best_val_ppl = min(best_val_ppl, val_ppl)
+            elapsed = time.time() - epoch_start_time
+            print('-' * 89)
+            print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
+                  f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
+            print('-' * 89)
 
-                experiment.log_metric('val/loss', val_loss, epoch)
-                experiment.log_metric('val/ppl', val_ppl, epoch)
+            experiment.log_metric('val/loss', val_loss, epoch)
+            experiment.log_metric('val/ppl', val_ppl, epoch)
 
-            experiment.log_metric('lr', lr, epoch)
+        experiment.log_metric('lr', lr, epoch)
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_model = copy.deepcopy(model)
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_model = copy.deepcopy(model)
 
-            scheduler.step()
-    except KeyboardInterrupt:
-        print('Captured Keyboard Interrupt')
+        scheduler.step()
 
     with experiment.test():
         test_loss = evaluate(best_model, test_data, config.bptt, ntokens, criterion)
@@ -295,6 +292,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr_milestones', type=str, required=True)
     parser.add_argument('--epochs', type=int, required=True)
     parser.add_argument('--use_orig_pos_enc', type=str2bool, required=True)
+    parser.add_argument('--random-search', type=str2bool, required=False, default=False)
 
     args = parser.parse_args()
 
@@ -310,13 +308,65 @@ if __name__ == '__main__':
     config.epochs = args.epochs
     config.use_orig_pos_enc = args.use_orig_pos_enc
 
-    if config.gbo_p and config.enc_do:
-        raise ValueError('Cannot have both gbo_p and enc_do enabled at the same time.')
+    if args.random_search:
+        while True:
+            try:
+                config.gbo_p = random.uniform(0.0, 10.0)
+                config.gbo_posemb_p = random.uniform(0.0, 10.0)
+                config.pos_dropout = random.uniform(0.0, 1.0)
 
-    if config.pos_dropout and config.gbo_posemb_p or config.use_orig_pos_enc and config.gbo_posemb_p:
-        raise ValueError('Cannot have both pos_dropout and gbo_posem_p enabled at the same time.')
+                config.gamma = random.uniform(0.1, 0.9)
+                milestones = []
+                milestone = 0
+                for _ in range(6):
+                    milestone += random.randrange(5, 100, 5)
+                    milestones.append(milestone)
+                config.lr_milestones = milestones
 
-    print(args)
-    print(config.__dict__)
+                config.epochs = random.randrange(250, 500, 50)
 
-    main(config)
+                choice = random.choice(['gbo', 'do'])
+
+                if choice == 'gbo':
+                    config.enc_do = 0.0
+                    config.pos_dropout = 0.0
+                    config.use_orig_pos_enc = False
+
+                    config.gbo_posemb_p = random.uniform(0.0, 10.0)
+                    config.gbo_p = random.uniform(0.0, 10.0)
+                elif choice == 'do':
+                    config.gbo_posemb_p = 0.0
+                    config.gbo_p = 0.0
+
+                    config.enc_do = random.uniform(0.0, 1.0)
+                    config.pos_dropout = random.uniform(0.0, 1.0)
+                    config.use_orig_pos_enc = bool(random.getrandbits(1))
+
+                config.experiment_name = choice
+
+                if config.gbo_p and config.enc_do:
+                    raise ValueError('Cannot have both gbo_p and enc_do enabled at the same time.')
+
+                if config.pos_dropout and config.gbo_posemb_p or config.use_orig_pos_enc and config.gbo_posemb_p:
+                    raise ValueError('Cannot have both pos_dropout and gbo_posem_p enabled at the same time.')
+
+                print(args)
+                print(config.__dict__)
+
+                main(config)
+
+            except KeyboardInterrupt:
+                break
+            except:
+                pass
+    else:
+        if config.gbo_p and config.enc_do:
+            raise ValueError('Cannot have both gbo_p and enc_do enabled at the same time.')
+
+        if config.pos_dropout and config.gbo_posemb_p or config.use_orig_pos_enc and config.gbo_posemb_p:
+            raise ValueError('Cannot have both pos_dropout and gbo_posem_p enabled at the same time.')
+
+        print(args)
+        print(config.__dict__)
+
+        main(config)
