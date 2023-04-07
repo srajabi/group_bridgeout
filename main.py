@@ -271,6 +271,17 @@ def main(config):
     experiment.end()
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -283,6 +294,7 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, required=True)
     parser.add_argument('--lr_milestones', type=str, required=True)
     parser.add_argument('--epochs', type=int, required=True)
+    parser.add_argument('--use_orig_pos_enc', type=str2bool, required=True)
 
     args = parser.parse_args()
 
@@ -296,11 +308,12 @@ if __name__ == '__main__':
     config.gamma = args.gamma
     config.lr_milestones = list(map(int, args.lr_milestones.split(',')))
     config.epochs = args.epochs
+    config.use_orig_pos_enc = args.use_orig_pos_enc
 
     if config.gbo_p and config.enc_do:
         raise ValueError('Cannot have both gbo_p and enc_do enabled at the same time.')
 
-    if config.pos_dropout and config.gbo_posemb_p:
+    if config.pos_dropout and config.gbo_posemb_p or config.use_orig_pos_enc and config.gbo_posemb_p:
         raise ValueError('Cannot have both pos_dropout and gbo_posem_p enabled at the same time.')
 
     print(args)
