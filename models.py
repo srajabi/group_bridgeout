@@ -20,14 +20,16 @@ class TransformerModel(nn.Module):
         self.model_type = 'Transformer'
 
         self.use_orig_pos_enc = use_orig_pos_enc
-        self.pos_encoder = PositionalEncoding(d_model, pos_dropout)
-
-        self.block_size = block_size
-        self.wte = nn.Embedding(ntoken, d_model)
-        self.wpe = nn.Embedding(block_size, d_model)
-        self.drop = nn.Dropout(pos_dropout)
-        self.gbo = GroupBridgeoutFcLayer(d_model, d_model, nu=gbo_posemb_p)
-        self.gbo_posemb_p = gbo_posemb_p
+        if self.use_orig_pos_enc:
+            self.pos_encoder = PositionalEncoding(d_model, pos_dropout)
+        else:
+            self.block_size = block_size
+            self.wte = nn.Embedding(ntoken, d_model)
+            self.wpe = nn.Embedding(block_size, d_model)
+            self.drop = nn.Dropout(pos_dropout)
+            self.gbo_posemb_p = gbo_posemb_p
+            if self.gbo_posemb_p:
+                self.gbo = GroupBridgeoutFcLayer(d_model, d_model, nu=gbo_posemb_p)
 
         encoder_layers = TransformerEncoderLayer(d_model=d_model, nhead=nhead,
                                                  gbo_p=gbo_p,
@@ -44,8 +46,9 @@ class TransformerModel(nn.Module):
         self.encoder.weight.data.uniform_(-initrange, initrange)
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-initrange, initrange)
-        self.wte.weight.data.uniform_(-initrange, initrange)
-        self.wpe.weight.data.uniform_(-initrange, initrange)
+        if not self.use_orig_pos_enc:
+            self.wte.weight.data.uniform_(-initrange, initrange)
+            self.wpe.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, src: Tensor, src_mask: Tensor) -> Tensor:
         """
@@ -62,7 +65,7 @@ class TransformerModel(nn.Module):
         else:
             device = src.device
             s, b = src.size()
-            assert s <= self.block_size, f"Cannot forward sequence of length {t}, block size is only {self.block_size}"
+            assert s <= self.block_size, f"Cannot forward sequence of length {s}, block size is only {self.block_size}"
             pos = torch.arange(0, s, dtype=torch.long, device=device).unsqueeze(1)  # shape (s, 1)
 
             # forward the GPT model itself
@@ -162,10 +165,10 @@ class TransformerEncoderLayer(nn.Module):
         super(TransformerEncoderLayer, self).__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first,
                                                **factory_kwargs)
-        # Implementation of Feedforward model
-        self.linear1 = nn.Linear(d_model, dim_feedforward, **factory_kwargs)
+
+        # self.linear1 = nn.Linear(d_model, dim_feedforward, **factory_kwargs)
         self.dropout = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(dim_feedforward, d_model, **factory_kwargs)
+        # self.linear2 = nn.Linear(dim_feedforward, d_model, **factory_kwargs)
 
         self.norm_first = norm_first
         self.norm1 = nn.LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
@@ -176,7 +179,6 @@ class TransformerEncoderLayer(nn.Module):
         # GBO
         self.gbo1 = GroupBridgeoutFcLayer(d_model, dim_feedforward, nu=gbo_p, **factory_kwargs)
         self.gbo2 = GroupBridgeoutFcLayer(d_model, dim_feedforward, nu=gbo_p, **factory_kwargs)
-        self.gbo_p = gbo_p
 
         # Legacy string support for activation function.
         if isinstance(activation, str):
@@ -313,18 +315,9 @@ class TransformerEncoderLayer(nn.Module):
 
     # feed forward block
     def _ff_block(self, x: Tensor) -> Tensor:
-        if self.gbo_p:
-            x = self.gbo1(x)
-        else:
-            x = self.linear1(x)
-
+        x = self.gbo1(x)
         x = self.activation(x)
         x = self.dropout(x)
-
-        if self.gbo_p:
-            x = self.gbo2(x)
-        else:
-            x = self.linear2(x)
-
+        x = self.gbo2(x)
         return self.dropout2(x)
 
